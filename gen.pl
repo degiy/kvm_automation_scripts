@@ -4,6 +4,7 @@
 #
 # - interfaces_mach_x : lines to add to /etc/network/interfaces to make bridges interfaces on vlan to give host and vms vlans (works for a debian/stretch kvm host). One file for each "x" host (need to use the same intf config : ex : eno2 for back to back comm)
 # - hosts : /etc/hosts completion with names for kvm host on different vlans (ex : server_a_vlan_x)
+# - vm_hosts : /etc/hosts completion with names for kvm vms on different vlans
 # - vm_z.ks : ks to create vm "z"
 # - virt-installs : script to launch all the virt-install cmds
 # - virt-kill : script to kill and remove files for all vms
@@ -88,8 +89,8 @@ foreach $m (@machines)
     open F,">interfaces_$mach";
     foreach $i (@interfaces)
     {
-	($nom,$id,$net,$vid,$bri)=@{$i};
-	print F "# machine $mach, interface $nom\n";
+	($name,$id,$net,$vid,$bri)=@{$i};
+	print F "# machine $mach, interface $name\n";
 	print F "\
 iface $bri.$vid inet manual
  vlan-raw-device $bri
@@ -102,7 +103,14 @@ iface br_$id inet static
  bridge_maxwait 10
 
 ";	 
-	print FF "$net.$nm ${mach}_${nom} $mach$id\n";  
+	print FF "$net.$nm ${mach}_${name} $mach$id\n";
+	# ht for fast access to vlan info
+	unless (exists $ht_vlan{$id})
+	{
+	    $ht_vlan{$id}{'name'}=$name;
+	    $ht_vlan{$id}{'addr'}=$net;
+	    $ht_vlan{$id}{'hosts'}="\n# hosts on VLAN $id ($name)\n";
+	}
     }
     close F;
     print FF "\n";
@@ -120,8 +128,20 @@ open KL,">virt-start";
 open KS,">virt-stop";
 foreach $v (@vms)
 {
-    ($nom,$nv,$vcpu,$ram,$disk,$id,$nets,$dist,$host)=@{$v};
+    ($name,$nv,$vcpu,$ram,$disk,$id,$nets,$dist,$host)=@{$v};
     $ram*=1024;
+    # iterate on lans
+    $lst="# addresses of $name on its admin network\n";
+    $lst.="$admin_network.$id $nv ${nv}adm ${name}_admin\n";
+    foreach $n (@{$nets})
+    {
+	$addr=$ht_vlan{$n}{'addr'};
+	$lname=$ht_vlan{$n}{'name'};
+	$line="$addr.$id ${name}_${lname} ${nv}$n\n";
+	# let's avoid doubles
+	#$lst.=$line;
+	$ht_vlan{$n}{'hosts'}.=$line;
+    }
     open F,">$nv.ks";
     $ks=$tp;
     &repl('dist',$dist);
@@ -129,6 +149,7 @@ foreach $v (@vms)
     &repl('hostname',$nv);
     &repl('host_id_nfs',$nfs_host_id);
     &repl('res_admin',$admin_network);
+    &repl('hosts',$lst);
     print F $ks;
     close F;
     print K "virt-install --os-type=linux --os-variant=rhel7 --location=/mnt/iso/$dist --vcpus $vcpu --ram $ram --name $nv --graphics none --noautoconsole --network bridge=br_adm --disk /kvm/vms/$nv.img,size=$disk --arch x86_64 --virt-type kvm --initrd-inject=/kvm/t/$nv.ks --extra-args 'console=ttyS0,115200n8 serial ks=file://$nv.ks' # on $host\n";
@@ -141,15 +162,44 @@ close KK;
 close KL;
 close KS;
 
+# list all hosts for each vlan
+open F,">vm_hosts";
+foreach $vlan (sort(keys %ht_vlan))
+{
+    print F $ht_vlan{$vlan}{'hosts'};
+}
+close F;
+
+# complement of hosts for each vm
+foreach $v (@vms)
+{
+    $st="# Addresses of VMs on LANs shared with $name\n";
+    ($name,$nv,$vcpu,$ram,$disk,$id,$nets,$dist,$host)=@{$v};
+    foreach $vlan (@{$nets})
+    {
+	$st.=$ht_vlan{$vlan}{'hosts'}
+    }
+    &insert("$nv.ks","__hosts__",$st);
+}
+
 sub repl
 {
     my ($src,$dst)=@_;
     $ks=~s/\(\($src\)\)/$dst/msg;
 }
 
-
-
-   
+sub insert
+{
+    my ($file,$pattern,$more)=@_;
+    open F,$file;
+    read F,$st,100000;
+    close F;
+    $st=~s/$pattern/$more/s;
+    open F,">$file";
+    print F $st;
+    close F;
+}    
+       
 # on hosts :
 # disable host key checking for ssh
 # cd ~/.ssh/;touch config;chmod 400 config;echo "Host 192.168.*" > config ; echo "  StrictHostKeyChecking no" >> config; echo "  UserKnownHostsFile=/dev/null" >> config

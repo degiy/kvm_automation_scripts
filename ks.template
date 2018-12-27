@@ -96,6 +96,7 @@ nfs-utils
 %post --log=/tmp/ks-post.log
 echo "POST : starting"
 
+# ---------- BASH ----------
 echo "bash custo"
 
 cat <<EOF >>/root/.bashrc
@@ -105,7 +106,8 @@ alias h=history
 
 EOF
 
-echo "ssh config"
+# ---------- SSH ----------
+echo "- ssh config"
 
 mkdir -m0700 /root/.ssh/
 
@@ -119,17 +121,24 @@ EOF
 
 chmod 0600 /root/.ssh/authorized_keys
 
-echo "repo fix"
-mkdir /etc/yum.repos.d/old
-mv /etc/yum.repos.d/*repo /etc/yum.repos.d/old
-cat <<EOF > /etc/yum.repos.d/local.repo
-[base]
-name=CentOS-7 - Base
-baseurl=file:///mnt/iso/((dist))
-gpgcheck=0
+# ---------- NTP ----------
+echo "- ntp config"
+cat <<EOF >> /etc/ntp.conf
+server ((res_admin)).((host_id_nfs))
 EOF
 
-echo 'nfs mount point on distro'
+systemctl enable ntpd
+
+# ---------- HOSTS ----------
+echo "- /etc/hosts completion (with local adresses)
+cat <<EOF>> /etc/hosts
+
+((hosts))
+__hosts__
+EOF
+
+# ---------- NFS MOUNTS ----------
+echo '- nfs mount point on distro'
 mkdir /mnt/iso
 mkdir /mnt/iso/((dist))
 mkdir /mnt/t
@@ -140,14 +149,21 @@ cat <<EOF >> /etc/fstab
 EOF
 mount -a
 
-# ntp
-cat <<EOF >> /etc/ntp.conf
-server ((res_admin)).((host_id_nfs))
+# ---------- YUM REPOS SET ON NFS ----------
+echo "- repo fix"
+mkdir /etc/yum.repos.d/old
+mv /etc/yum.repos.d/*repo /etc/yum.repos.d/old
+cat <<EOF > /etc/yum.repos.d/local.repo
+[base]
+name=CentOS-7 - Base
+baseurl=file:///mnt/iso/((dist))
+gpgcheck=0
 EOF
 
-systemctl enable ntpd
-
+# ---------- YUM UPDATE ----------
+echo "- yum update"
 yum clean all
 yum -y update 
+
 echo "POST: DONE!"
 %end
