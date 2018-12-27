@@ -7,6 +7,7 @@
 # - vm_hosts : /etc/hosts completion with names for kvm vms on different vlans
 # - vm_z.ks : ks to create vm "z"
 # - virt-installs : script to launch all the virt-install cmds
+# - post_z.sh : script to be invoqued after normal installation of vm "z" that will add missing network interfaces (need ssh on vm "z" to work)
 # - virt-kill : script to kill and remove files for all vms
 # - virt-start : script to launch all vms
 # - virt-stop : script to stop all vms (these 5 latest files are tagged with the host name on comment at the end of each line, use a grep to select the eligibles lines you wanna run, ex : grep 'on e1' virt-start | sh)
@@ -33,7 +34,8 @@
 #    - first, vms are created from a template ks with only one interface on "admin" lan
 #    - second, additionnal network are created through virsh on host and ssh on vms
 
-#--------------------------------------------------------------------------------
+#-------------------------------config-------------------------------------------------
+
 # VLAN declaration : all those VLANs will be "created" on back to back cable between the 2 hosts (can be more, but will need a switch or script adaptation to manage a ring of back to back cables open with spt)
 # admin (adm) is supposed to be the one used to administrate vm from hosts : it will be the one used to ssh root on vm, mount nfs
 # verif : # ip a | grep ': br_' | sed -e 's/group.*$//'
@@ -79,7 +81,7 @@
 $admin_network='192.168.220';
 $nfs_host_id='1';
 
-# --------------------------------------------------------------------------------
+# ---------------------------------code-----------------------------------------------
 
 # TODO : adding the capability to create pure level 2 vlans with no @ip on host (when there is no need, and normally excepted for admin, there should no be any need)
 open FF,">hosts";
@@ -122,6 +124,7 @@ open F,"../ks.template";
 read F,$tp,100000;
 close F;
 
+$lines_adm="# addresses of VMs on admin network\n";
 open K,">virt-installs";
 open KK,">virt-kill";
 open KL,">virt-start";
@@ -132,7 +135,9 @@ foreach $v (@vms)
     $ram*=1024;
     # iterate on lans
     $lst="# addresses of $name on its admin network\n";
-    $lst.="$admin_network.$id $nv ${nv}adm ${name}_admin\n";
+    $line="$admin_network.$id $nv ${nv}adm ${name}_admin\n";
+    $lst.=$line;
+    $lines_adm.=$line;
     foreach $n (@{$nets})
     {
 	$addr=$ht_vlan{$n}{'addr'};
@@ -164,23 +169,53 @@ close KS;
 
 # list all hosts for each vlan
 open F,">vm_hosts";
+print F "\n",$lines_adm;
 foreach $vlan (sort(keys %ht_vlan))
 {
+    next if $vlan eq 'adm';
     print F $ht_vlan{$vlan}{'hosts'};
 }
 close F;
 
-# complement of hosts for each vm
+# complement of hosts for each vm +
+# post-post install of additionnal interfaces to vms (interfaces different from adm)
 foreach $v (@vms)
 {
-    $st="# Addresses of VMs on LANs shared with $name\n";
     ($name,$nv,$vcpu,$ram,$disk,$id,$nets,$dist,$host)=@{$v};
+    $st="# Addresses of VMs on LANs shared with $name\n";
+    open F,">post_$nv.sh";
+    print F "#!/bin/bash\n\n";
+    print F "# --- stop the VM (if not the case already) ---\n echo stopping $nv \n virsh shutdown $nv\n sleep 3\n\n";
+    print F "# --- QEMU image mount ----\n echo 'mounting qemu img'\n modprobe nbd max_part=8\n qemu-nbd -c /dev/nbd0 /kvm/vms/$nv.img\n partx -a /dev/nbd0 \n mkdir /tmp/img \n mount /dev/nbd0p1 /tmp/img \n\n";
+    $eth=1;
     foreach $vlan (@{$nets})
     {
-	$st.=$ht_vlan{$vlan}{'hosts'}
+	$st.=$ht_vlan{$vlan}{'hosts'};
+	print F "# ---- KVM add intf for vlan $vlan ----\n virsh attach-interface $nv bridge br_$vlan --model virtio --config\n";
+	print F " mac=`virsh domiflist $nv | grep br_$vlan | sed -e 's/^.*  *//' | dd conv=ucase` \n";
+	print F " cat <<EOF > /tmp/img/etc/sysconfig/network-scripts/ifcfg-eth$eth\n";
+	print F "NAME=\"eth$eth\"\n";
+	print F "DEVICE=\"eth$eth\"\n";
+	print F "HWADDR=\"\$mac\"\n";
+	print F "ONBOOT=\"yes\"\n";
+	print F "TYPE=\"Ethernet\"\n";
+	print F "IPADDR=\"",$ht_vlan{$vlan}{'addr'},'.',"$id\"\n";
+	print F "PREFIX=\"24\"\n";
+	print F "NETMASK=\"255.255.255.0\"\n";
+	print F "BOOTPROTO=\"none\"\n";
+	print F "IPV6INIT=\"no\"\n";
+	print F "EOF\n\n";
+
+	# increment eth number
+	$eth++;
     }
     &insert("$nv.ks","__hosts__",$st);
+    print F "\n# ---- Unmount image ----\n echo 'dismounting qemu img'\n umount /tmp/img \n qemu-nbd -d /dev/nbd0 \n";
+    print F "\n# ---- restart the VM ----\n echo starting $nv \n virsh start $nv\n";
+    close F;
 }
+
+#---------------------------------annexes-----------------------------------------------
 
 sub repl
 {
@@ -191,13 +226,13 @@ sub repl
 sub insert
 {
     my ($file,$pattern,$more)=@_;
-    open F,$file;
-    read F,$st,100000;
-    close F;
+    open FR,$file;
+    read FR,$st,100000;
+    close FR;
     $st=~s/$pattern/$more/s;
-    open F,">$file";
-    print F $st;
-    close F;
+    open FW,">$file";
+    print FW $st;
+    close FW;
 }    
        
 # on hosts :
