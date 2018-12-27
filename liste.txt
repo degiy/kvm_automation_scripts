@@ -1,0 +1,160 @@
+
+================================================================================
+
+A/ Install physique 3 serveurs e1,e2,e3
+  - provisionning SLI
+  - reception par EEI
+  - mise en baie EEI
+  - cablage reseau EEI + cable direct entre e1 et e2
+  - installation OS debian par EEI
+  
+10.200.10.81    ebrox e1
+10.200.10.82    edino e2
+10.200.10.83    edopi e3
+
+# cat /etc/debian_version  : 9.6 (stretch de 2017)
+4.9.0-8-amd64 #1 SMP Debian 4.9.130-2 (2018-10-27) x86_64 GNU/Linux
+QEMU emulator version 2.8.1(Debian 1:2.8+dfsg-6+deb9u5)
+
+disques :
+
+   8        0  292935982 sda
+   8        1     524288 sda1 (/boot)
+   8        2  292410670 sda2 (/lvm)
+
+  --- Logical volume ---
+  LV Path                /dev/vg0/swap
+  LV Size                8.00 GiB
+  --- Logical volume ---
+  LV Path                /dev/vg0/root
+  LV Size                1.00 GiB
+  --- Logical volume ---
+  LV Path                /dev/vg0/var
+  LV Size                4.00 GiB
+  --- Logical volume ---
+  LV Path                /dev/vg0/usr
+  LV Size                8.00 GiB
+  --- Logical volume ---
+  LV Path                /dev/vg0/kvm
+  LV Size                200.00 GiB
+  --- Logical volume ---
+  LV Path                /dev/vg0/home
+  LV Size                6.00 GiB
+
+réseau :
+
+2: eno1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq master br0 state UP mode DEFAULT group default qlen 1000
+3: eno2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+
+3: eno2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether a0:d3:c1:fa:dc:61 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.2/24 brd 192.168.1.255 scope global eno2
+    
+3: eno2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000
+    link/ether ac:16:2d:6e:bc:c5 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.1.1/24 brd 192.168.1.255 scope global eno2
+
+internet :
+
+ping proxy.eei.cena.fr     
+PING tahsa.eei.cena.fr (10.196.32.91)
+
+search eei.cena.fr
+nameserver 10.196.32.89
+nameserver 10.196.32.91
+
+================================================================================
+
+B/ Recup ISO + systeme de base machines hote + partage
+
+- centos 7.6 et fedora server 28 et debian 9.6
+dans : /kvm/iso et montage dans /mnt/iso
+
+- export
+
+/kvm/iso/fedora_server_28.iso   /mnt/iso/f28    iso9660 ro,relatime
+/kvm/iso/centos_76.iso  /mnt/iso/c76    iso9660 ro,relatime
+/kvm/iso/debian-9.6.0-amd64-DVD-1.iso   /mnt/iso/d96    iso9660 ro,relatime
+
+- montage nfs via réseau eei sur 3 autres serveurs de ces 2 repertoires
+
+#systemctl status nfs-kernel-server
+dans /etc/exports
+/kvm/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) e3(rw,sync,no_subtree_check,no_root_squash)
+
+exportfs -a
+
+- import
+
+mkdir /mnt/iso
+mkdir /kvm/iso
+mkdir /kvm/t  
+
+ds /etc/fstab
+
+e1:/kvm/iso /kvm/iso nfs ro
+e1:/mnt/iso /mnt/iso nfs ro
+e1:/kvm/t /kvm/t nfs rw
+
+mount -a
+
+================================================================================
+
+C/ LANs partagés
+
+- ménage eno2 de nicolas
+ip a del 192.168.1.1/24 dev eno2
+ip a del fe80::ae16:2dff:fe6e:bcc5/64 dev eno2
+
+nom     abr  @ip          nm  vlanid
+-------+---+-------------+---+----+
+admin   ADM 192.168.220.0 /24  220
+interne INT 192.168.221.0 /24  221
+ingres  ING 192.168.222.0 /24  222
+esb     ESB 192.168.223.0 /24  223
+storage STO 192.168.224.0 /24  224
+
+- bridge des 2 côtés, ex de /etc/interfaces
+
+iface eno2.220 inet manual
+ vlan-raw-device eno2
+
+auto br_adm
+iface br_adm inet static
+ address 192.168.220.2/24
+ bridge_ports eno2.220
+ bridge_stp on
+ brdige_maxwait 10
+
+voir script (gen_...pl)
+
+DNS ? à voir
+
+================================================================================
+
+D/ creation VM générique (@IP + cle + montage commun)
+
+- autorisation de montage iso via nfs via admin
+
+/kvm/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash) 192.168.220.0/24(ro,async,no_subtree_check,no_root_squash)
+/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) e3(rw,sync,no_subtree_check,no_root_squash) 192.168.220.0/24(rw,sync,no_subtree_check,no_root_squash)
+
+paramètres :
+- ip (via dhcp ou passage en force ?)
+- serveur ntp
+- accès à l'iso (ip + path)
+- attaches reseaux
+- compte root accessible depuis les machines d'admin (post-install)
+
+
+================================================================================
+
+
+
+
+================================================================================
+E/ VM gluster fs
+
