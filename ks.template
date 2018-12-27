@@ -19,7 +19,7 @@ timezone Europe/Paris --isUtc
 user --groups=wheel --name=esa --password=e
 
 # Use NFS
-nfs --server=192.168.220.1 --dir=/mnt/iso/((dist)) --opts=ro
+nfs --server=((res_admin)).((host_id_nfs)) --dir=/mnt/iso/((dist)) --opts=ro
 # Use text mode install
 text
 
@@ -36,7 +36,7 @@ part / --fstype=xfs --grow
 bootloader --location=mbr --boot-drive=vda
 
 # Network information
-network --bootproto=static --ip=192.168.220.((host_id)) --netmask=255.255.255.0 --hostname=((hostname))
+network --bootproto=static --ip=((res_admin)).((host_id)) --netmask=255.255.255.0 --hostname=((hostname))
 
 %packages
 @core
@@ -96,9 +96,6 @@ nfs-utils
 %post --log=/tmp/ks-post.log
 echo "POST : starting"
 
-echo "192.168.220.1 e1 e1adm" >> /etc/hosts
-echo "192.168.220.2 e2 e2adm" >> /etc/hosts
-
 echo "bash custo"
 
 cat <<EOF >>/root/.bashrc
@@ -114,8 +111,10 @@ mkdir -m0700 /root/.ssh/
 
 ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
 
+# TODO : make customizable
 cat <<EOF > /root/.ssh/authorized_keys
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC4je5atkdrcESaRCke9wS6sZ+XvckECr81HhfJnCdQTouTSOkfkdyMnkCH+sU9Sdsbt7RpadarvQSb4hgRcop+K/iBmkkzicnhtyXxy3q/aXU40jaYvet7mubs93QYt7ozvjFqOUxnMLL99HsEVibIgykBi6+Rtio0ogL23kF08gI5k2AxhM/6bs7zIULEFRSli67kxDfM9ozQ2FhgAJHwEaqmymZpOGNt7gNsD02R3cDtkAt7g9ZmcaNOQlFDEpTjHROoEJyEVZSxTIiL9DANBu8kc7LxoIP1SkKuIPpxsBYZJeJx3RtBeIXP6O5+1SfqOVHgUSuKqt+hRq4RFMY3 root@ebrox
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfbl/kVn84JIDUq9McmtjHb5Kt2BOJ6Tb81xp1q4QFmTuCGbdZB8ux4A020qo2JMQOuBVoo6jZQ1oEc/8+uf7uyAzE0xOuy7L++lbrpN9nvIPZPunhthw4ItzWsw74S+5tcN7NnzT1O+FD/FoDlXYcQxQYjlTDpX/wZF246uEfdCCqBHJXEqs+PqZUuasErdghr7RhxzeZELk3Epm5xBZLEcHWT4GClOKx/f5r/bTfF4vB1e9EkveSz8rSTaZL4QAYBhLpnGTJdL6hF0u5V8y60eXQBLL4XdLIMBlNYMYZszSQnbv7p9xKXnTYuP2iiHDPOiDgmgcwoPtQfdhz//MT root@edino
 EOF
 
 chmod 0600 /root/.ssh/authorized_keys
@@ -135,16 +134,15 @@ mkdir /mnt/iso
 mkdir /mnt/iso/((dist))
 mkdir /mnt/t
 cat <<EOF >> /etc/fstab
-e1:/mnt/iso /mnt/iso nfs ro
-e1:/kvm/t /mnt/t nfs rw
+((res_admin)).((host_id_nfs)):/mnt/iso/((dist)) /mnt/iso/((dist)) nfs ro
+((res_admin)).((host_id_nfs)):/kvm/t /mnt/t nfs rw
 
 EOF
 mount -a
 
 # ntp
 cat <<EOF >> /etc/ntp.conf
-server e1
-server e2
+server ((res_admin)).((host_id_nfs))
 EOF
 
 systemctl enable ntpd

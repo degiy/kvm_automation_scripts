@@ -35,7 +35,8 @@
 #--------------------------------------------------------------------------------
 # VLAN declaration : all those VLANs will be "created" on back to back cable between the 2 hosts (can be more, but will need a switch or script adaptation to manage a ring of back to back cables open with spt)
 # admin (adm) is supposed to be the one used to administrate vm from hosts : it will be the one used to ssh root on vm, mount nfs
-
+# verif : # ip a | grep ': br_' | sed -e 's/group.*$//'
+#
 # full  abreviated             interface on host
 # vlan    vlan                 to create the vlan
 # name    name  @ip res vlanid bridge intf onto
@@ -53,11 +54,31 @@
     [ 'cluster_data_store'   ,'cl_ds' ,'192.168.227',227,'eno2' ],
     );
 
-# hotes
+# hosts (name & host.id)
 @machines=(
     [ 'e1',1 ],
     [ 'e2',2 ]
     );
+
+# VMs : full name, abr name, nb_core, ram, disk, host.id, vlans, distro, prefered host...
+@vms= (
+    [ 'dmz_a'          ,'da',2,2,2,101, ['int','cl_dmz']     , 'c76', 'e1' ],
+    [ 'dmz_b'          ,'db',2,2,2,102, ['int','cl_dmz']     , 'c76', 'e2' ],
+    [ 'load_balancer_a','la',1,1,2,111, ['int','ing','cl_lb'], 'c76', 'e1' ],
+    [ 'load_balancer_b','lb',1,1,2,112, ['int','ing','cl_lb'], 'c76', 'e2' ],
+    [ 'fuse_a',         'fa',4,8,4,121, ['int','ing','esb']  , 'c76', 'e1' ],
+    [ 'fuse_b',         'fb',4,8,4,122, ['int','ing','esb']  , 'c76', 'e2' ],
+    [ 'broker_a',       'ba',2,4,2,131, ['esb','sto']        , 'c76', 'e1' ],
+    [ 'broker_b',       'bb',2,4,2,132, ['esb','sto']        , 'c76', 'e2' ],
+    [ 'data_store_a',   'sa',1,1,2,141, ['sto','cl_ds']      , 'c76', 'e1' ],
+    [ 'data_store_b',   'sb',1,1,2,142, ['sto','cl_ds']      , 'c76', 'e2' ]
+    );
+
+# global settings for NFS & NTP
+$admin_network='192.168.220';
+$nfs_host_id='1';
+
+# --------------------------------------------------------------------------------
 
 # TODO : adding the capability to create pure level 2 vlans with no @ip on host (when there is no need, and normally excepted for admin, there should no be any need)
 open FF,">hosts";
@@ -88,21 +109,7 @@ iface br_$id inet static
 }
 close FF;
 
-# VMs : full name, abr name, nb_core, ram, disk, host.id, vlans, distro, prefered host...
-@vms= (
-    [ 'dmz_a'          ,'da',2,2,2,101, ['int','cl_dmz']     , 'c76', 'e1' ],
-    [ 'dmz_b'          ,'db',2,2,2,102, ['int','cl_dmz']     , 'c76', 'e2' ],
-    [ 'load_balancer_a','la',1,1,2,111, ['int','ing','cl_lb'], 'c76', 'e1' ],
-    [ 'load_balancer_b','lb',1,1,2,112, ['int','ing','cl_lb'], 'c76', 'e2' ],
-    [ 'fuse_a',         'fa',4,8,4,121, ['int','ing','esb']  , 'c76', 'e1' ],
-    [ 'fuse_b',         'fb',4,8,4,122, ['int','ing','esb']  , 'c76', 'e2' ],
-    [ 'broker_a',       'ba',2,4,2,131, ['esb','sto']        , 'c76', 'e1' ],
-    [ 'broker_b',       'bb',2,4,2,132, ['esb','sto']        , 'c76', 'e2' ],
-    [ 'data_store_a',   'sa',1,1,2,141, ['sto','cl_ds']      , 'c76', 'e1' ],
-    [ 'data_store_b',   'sb',1,1,2,142, ['sto','cl_ds']      , 'c76', 'e2' ]
-    );
-
-# creation des ks + virt install associés
+# creation of ks + virt install associated
 open F,"../ks.template";
 read F,$tp,100000;
 close F;
@@ -120,6 +127,8 @@ foreach $v (@vms)
     &repl('dist',$dist);
     &repl('host.id',$id);
     &repl('hostname',$nv);
+    &repl('host_id_nfs',$nfs_host_id);
+    &repl('res_admin',$admin_network);
     print F $ks;
     close F;
     print K "virt-install --os-type=linux --os-variant=rhel7 --location=/mnt/iso/$dist --vcpus $vcpu --ram $ram --name $nv --graphics none --noautoconsole --network bridge=br_adm --disk /kvm/vms/$nv.img,size=$disk --arch x86_64 --virt-type kvm --initrd-inject=/kvm/t/$nv.ks --extra-args 'console=ttyS0,115200n8 serial ks=file://$nv.ks' # on $host\n";
@@ -135,8 +144,13 @@ close KS;
 sub repl
 {
     my ($src,$dst)=@_;
-    $ks=~s/\(\($src\)\)/$dst/ms;
+    $ks=~s/\(\($src\)\)/$dst/msg;
 }
 
 
+
    
+# on hosts :
+# disable host key checking for ssh
+# cd ~/.ssh/;touch config;chmod 400 config;echo "Host 192.168.*" > config ; echo "  StrictHostKeyChecking no" >> config; echo "  UserKnownHostsFile=/dev/null" >> config
+#  for a in *ks; do (cd ../..; ln -s kvm_automation_scripts/run/$a .); done

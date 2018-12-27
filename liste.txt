@@ -81,8 +81,10 @@ dans : /kvm/iso et montage dans /mnt/iso
 #systemctl status nfs-kernel-server
 dans /etc/exports
 /kvm/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
-/mnt/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
-/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) e3(rw,sync,no_subtree_check,no_root_squash)
+/mnt/iso/c76 192.168.220.0/24(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso/d96 192.168.220.0/24(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso/f28 192.168.220.0/24(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
+/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) e3(rw,sync,no_subtree_check,no_root_squash) 192.168.220.0/24(rw,sync,no_subtree_check,no_root_squash)
 
 exportfs -a
 
@@ -138,23 +140,19 @@ D/ creation VM générique (@IP + cle + montage commun)
 
 - autorisation de montage iso via nfs via admin
 
-/kvm/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash)
-/mnt/iso        e2(ro,async,no_subtree_check,no_root_squash) e3(ro,async,no_subtree_check,no_root_squash) 192.168.220.0/24(ro,async,no_subtree_check,no_root_squash)
-/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) e3(rw,sync,no_subtree_check,no_root_squash) 192.168.220.0/24(rw,sync,no_subtree_check,no_root_squash)
-
 paramètres :
-- ip (via dhcp ou passage en force ?)
+- passage ks par ajout de fichier à l'initrd (injection)
+- ip (passage via ks)
 - serveur ntp
-- accès à l'iso (ip + path)
-- attaches reseaux
+- accès à l'iso (ip + path par nfs)
 - compte root accessible depuis les machines d'admin (post-install)
 
 
 ================================================================================
-
+E/ creation des interfaces supplémentaires des vms
 
 
 
 ================================================================================
-E/ VM gluster fs
+F/ VM gluster fs
 
