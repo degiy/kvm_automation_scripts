@@ -158,9 +158,9 @@ foreach $v (@vms)
     print F $ks;
     close F;
     print K "virt-install --os-type=linux --os-variant=rhel7 --location=/mnt/iso/$dist --vcpus $vcpu --ram $ram --name $nv --graphics none --noautoconsole --network bridge=br_adm --disk /kvm/vms/$nv.img,size=$disk --arch x86_64 --virt-type kvm --initrd-inject=/kvm/t/$nv.ks --extra-args 'console=ttyS0,115200n8 serial ks=file://$nv.ks' # on $host\n";
-    print KK "virsh destroy $nv; virsh undefine $nv; rm -f /kvm/mvs/$nv.img # on $host\n";
+    print KK "virsh destroy $nv; virsh undefine $nv --remove-all-storage; rm -f /kvm/vms/$nv.img # on $host\n";
     print KL "virsh start $nv # on $host\n";
-    print KS "((ssh root\@$nv shutdown -h now); sleep 5;virsh destroy $nv)& # on $host\n";
+    print KS "((ssh root\@$nv shutdown -h now)&; sleep 5;virsh shutdown $nv; sleep 3; virsh destroy $nv)& # on $host\n";
 };
 close K;
 close KK;

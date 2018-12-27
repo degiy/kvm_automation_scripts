@@ -130,7 +130,7 @@ EOF
 systemctl enable ntpd
 
 # ---------- HOSTS ----------
-echo "- /etc/hosts completion (with local adresses)
+echo "- /etc/hosts completion (with local adresses)"
 cat <<EOF>> /etc/hosts
 
 ((hosts))
@@ -147,6 +147,7 @@ cat <<EOF >> /etc/fstab
 ((res_admin)).((host_id_nfs)):/kvm/t /mnt/t nfs rw
 
 EOF
+
 mount -a
 
 # ---------- YUM REPOS SET ON NFS ----------
