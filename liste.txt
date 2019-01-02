@@ -151,8 +151,139 @@ paramètres :
 ================================================================================
 E/ creation des interfaces supplémentaires des vms
 
+- voir script gen.pl et utilisation des commandes virsh atach et montage qemu d'image qcow
+- config ansible par groupe (tout, par serveur hote et par fonction transverse)
+
 
 
 ================================================================================
 F/ VM gluster fs
 
+- backup des vms de e1 sur e3 (pour reprendre rapidement à partir de l'image qemu)
+  attention à conserver le sparse mode sur la copie via nfs
+    cp --sparse=always sa.img /kvm/backups/
+    1133900 -rw------- 1 root root 2148073472 Dec 28 14:08 sa.img
+
+- test sur noeuds ds et vlan cluster entre les ds : sa & sb
+- échanges de clés ssh entre machines, et test ssh (via vlan storage)
+
+- récup des rpms sur http://mirror.centos.org/centos/7/storage/x86_64/gluster-3.12/
+
+yum install ./glusterfs-server-3.12.15-1.el7.x86_64.rpm ./glusterfs-api-3.12.15-1.el7.x86_64.rpm ./glusterfs-libs-3.12.15-1.el7.x86_64.rpm ./glusterfs-client-xlators-3.12.15-1.el7.x86_64.rpm ./glusterfs-fuse-3.12.15-1.el7.x86_64.rpm ./glusterfs-cli-3.12.15-1.el7.x86_64.rpm ./glusterfs-3.12.15-1.el7.x86_64.rpm userspace-rcu-0.10.0-3.el7.x86_64.rpm
+
+sur chaque serveur :
+
+systemctl enable glusterd
+systemctl start glusterd
+systemctl status glusterd
+gluster peer probe 192.168.227.142
+gluster peer probe 192.168.224.142
+# sans dernière ligne pas moyen de se connecter de l'autre réseau
+mkdir /gv0
+
+sur le premier :
+
+gluster volume create gv0 replica 2 192.168.227.141:/gv0 192.168.227.142:/gv0 
+gluster volume start gv0
+gluster volume info
+
+sur les 2 :
+
+mkdir /mnt/gv0
+mount -t glusterfs 192.168.227.141:/gv0 /mnt/gv0
+
+[ tester que ça marche au reboot ]
+
+================================================================================
+G/ HA Proxy sur LB
+(pas urgent)
+
+================================================================================
+H/ IP relogeable sur DMZ + clustering actif/passif avec pacemaker
+sur dmz a & b :
+
+# install de pcs (pacemaker)
+yum install pcs -y
+
+# choix d'un mdp (h)
+passwd hacluster
+
+# activation service
+systemctl enable pcsd.service
+systemctl start pcsd.service
+
+# creation du cluster sur dmz a & b (commande que sur a), tester auth avec options -u user -p pw
+pcs cluster auth dmz_a_cluster_dmz dmz_b_cluster_dmz
+pcs cluster setup --start --name dmz_cluster dmz_a_cluster_dmz dmz_b_cluster_dmz
+pcs cluster enable --all
+
+# disable stonith
+pcs property set stonith-enabled=false
+
+# ip virtuelle (pour l'instant sur admin...)
+pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=192.168.220.100 iflabel=ifcl op monitor interval="5s" timeout="10s"
+
+================================================================================
+H/ ajout d'une interface sortante sur le réseau EEI pour les machines DMZ A & B
+trouver une ip dispo
+nmap -sn 10.200.10.0/24 | grep 10.200.10 | sed -e 's/^.*10.200.10.//' -e 's/^).*$//' | sort -n
+- > 84 et 85 en fixe et 86 en flottante
+
+virsh attach-interface da bridge br0 --model virtio --config
+virsh domiflist da | grep br0
+
+=> 52:54:00:fe:ff:ce   da
+
+virsh attach-interface db bridge br0 --model virtio --config
+virsh domiflist db | grep br0
+
+=> 52:54:00:94:da:d2   db
+
+cd /etc/sysconfig/network-scripts/
+cat ifcfg-eth2 | sed -e 's/eth2/eth3/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:fe:ff:ce/' -e 's/^IPADDR=.*$/IPADDR="10.200.10.84"/' > ifcfg-eth3
+cat ifcfg-eth2 | sed -e 's/eth2/eth3/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:94:da:d2/' -e 's/^IPADDR=.*$/IPADDR="10.200.10.85"/' > ifcfg-eth3
+
+pcs resource delete virtual_ip
+pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=10.200.10.86 iflabel=ifcl op monitor interval="5s" timeout="10s"
+
+
+================================================================================
+I/ autour du reverse proxy
+
+yum install haproxy -y
+
+================================================================================
+J/ autour d'un serveur web bidon sur esb
+
+yum install perl-HTTP-Daemon -y
+mkdir site
+cat > site/index.html
+<html>
+response fuse A
+</html>
+^D
+
+cat > http_server.pl
+
+
+#!/usr/bin/perl
+
+use HTTP::Daemon;
+use HTTP::Status;
+ 
+my $d = HTTP::Daemon->new(LocalPort => 80) || die;
+print "Please contact me at: <URL:", $d->url, ">\n";
+while (my $c = $d->accept) {
+    while (my $r = $c->get_request) {
+        if ($r->method eq 'GET' ) {
+            $c->send_file_response("/root/site/".$r->uri->path);
+        }
+        else {
+            $c->send_error(RC_FORBIDDEN)
+        }
+    }
+    $c->close;
+    undef($c);
+}
+
+chmod 755 ./http_server.pl 
