@@ -248,9 +248,73 @@ pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=10.200.10.86 iflabel=ifc
 
 
 ================================================================================
-I/ autour du reverse proxy
+I1/ autour du load balancer (sur fa, fb)
+
+Pour fa et fb (on reste en http simple : actif / actif)
 
 yum install haproxy -y
+systemctl enable haproxy
+
+fichier /etc/rsyslog.d/haproxy.conf
+$ModLoad imudp
+$UDPServerAddress 127.0.0.1
+$UDPServerRun 514
+
+local2.*        /var/log/haproxy.log
+
+fichier /etc/haproxy/haproxy.cfg
+global
+    log         127.0.0.1 local2
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     1000
+    user        haproxy
+    group       haproxy
+    daemon
+
+defaults
+        mode    http
+
+listen http-in
+        bind load_balancer_a_intern:80
+        log global
+        option httplog
+        balance roundrobin
+        server f1 fuse_a_ingres:80 check
+        server f2 fuse_b_ingres:80 check
+
+
+systemctl restart rsyslog
+systemctl start haproxy
+tail -f /var/log/haproxy.log
+
+================================================================================
+I2/ reverse proxy (sur da, db)
+
+# Pour da et db on est dans le cluster (un seul haproxy sur le noeud actif)
+
+# recup du script pacemaker sur le site suivant ,
+# à copier dans /usr/lib/ocf/resource.d/heartbeat/haproxy :
+
+https://github.com/russki/cluster-agents
+
+# mise à jour des fichiers sur le 2nd noeud
+scp /usr/lib/ocf/resource.d/heartbeat/haproxy root@dbint:/usr/lib/ocf/resource.d/heartbeat
+scp /etc/haproxy/haproxy.cfg root@dbint:/etc/haproxy/
+
+creation du service 
+pcs resource create reverse_proxy ocf:heartbeat:haproxy conffile=/etc/haproxy/haproxy.cfg op monitor interval="5s" timeout="10s"
+
+# ordre de démarrage
+pcs constraint order start virtual_ip then start reverse_proxy
+pcs constraint order stop reverse_proxy then stop virtual_ip
+# colocalisation
+pcs constraint colocation add reverse_proxy virtual_ip INFINITY
+pcs property set no-quorum-policy=ignore
+
+================================================================================
+I3/ PKI & TLS endpoint sur DMZ
+
 
 ================================================================================
 J/ autour d'un serveur web bidon sur esb
@@ -264,7 +328,6 @@ response fuse A
 ^D
 
 cat > http_server.pl
-
 
 #!/usr/bin/perl
 
@@ -285,5 +348,33 @@ while (my $c = $d->accept) {
     $c->close;
     undef($c);
 }
+^D
 
 chmod 755 ./http_server.pl 
+
+en faire un service
+
+cat > /etc/systemd/system/http_perl_server.service
+[Unit]
+Description=Serveur web en perl pour test esb
+After=network-online.target
+ 
+[Service]
+Type=exec
+ 
+User=root
+Group=root
+UMask=007
+ 
+ExecStart=/root/http_server.pl
+ 
+Restart=on-failure
+ 
+# Configures the time to wait before service is stopped forcefully.
+TimeoutStopSec=10
+ 
+[Install]
+WantedBy=multi-user.target
+^D
+systemctl enable http_perl_server
+systemctl start http_perl_server
