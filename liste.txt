@@ -183,16 +183,23 @@ mkdir /gv0
 
 sur le premier :
 
-gluster volume create gv0 replica 2 192.168.227.141:/gv0 192.168.227.142:/gv0 
+gluster volume create gv0 replica 2 192.168.224.141:/gv0 192.168.224.142:/gv0 force
 gluster volume start gv0
 gluster volume info
 
-sur les 2 :
+(pareil pour gv1)
+
+sur les 2 (pour test) :
 
 mkdir /mnt/gv0
 mount -t glusterfs 192.168.227.141:/gv0 /mnt/gv0
 
 [ tester que ça marche au reboot ]
+
+- sur BA et BB
+ds /etc/fstab
+192.168.224.141:/gv0    /mnt/gv0        glusterfs       rw,backupvolfile-server=192.168.224.142 0 0
+192.168.224.142:/gv1    /mnt/gv1        glusterfs       rw,backupvolfile-server=192.168.224.141 0 0
 
 ================================================================================
 G/ HA Proxy sur LB
@@ -226,7 +233,7 @@ pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=192.168.220.100 iflabel=
 ================================================================================
 H/ ajout d'une interface sortante sur le réseau EEI pour les machines DMZ A & B
 trouver une ip dispo
-nmap -sn 10.200.10.0/24 | grep 10.200.10 | sed -e 's/^.*10.200.10.//' -e 's/^).*$//' | sort -n
+map -sn 10.200.10.0/24 | grep 10.200.10 | sed -e 's/^.*10.200.10.//' -e 's/^).*$//' | sort -n
 - > 84 et 85 en fixe et 86 en flottante
 
 virsh attach-interface da bridge br0 --model virtio --config
@@ -314,6 +321,31 @@ pcs property set no-quorum-policy=ignore
 
 ================================================================================
 I3/ PKI & TLS endpoint sur DMZ
+
+=> generation du certificat
+
+openssl req -newkey rsa:2048 -nodes -keyout da_rsa_2048.key -x509 -out da_cert_rsa_2048.crt -subj "/C=FR/ST=Toulouse/L=Mounede/O=DSNA/OU=DTI/CN=swimaman.asap.dsna.fr"
+cat da_rsa_2048.key da_cert_rsa_2048.crt > /var/lib/haproxy/da_cert_rsa_2048.pem
+chown haproxy.haproxy /var/lib/haproxy/da_cert_rsa_2048.pem
+
+scp /var/lib/haproxy/da_cert_rsa_2048.pem root@dbint:/var/lib/haproxy/
+
+/etc/haproxy/haproxy.cfg à adapter :
+
+listen https-in
+        bind 10.200.10.86:443 ssl crt /var/lib/haproxy/da_cert_rsa_2048.pem
+        log global
+        option httplog
+        balance roundrobin
+        server l1 load_balancer_a_intern:80 check
+        server l2 load_balancer_b_intern:80 check
+	
+scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
+
+=> verif
+openssl x509 -text -noout -in da_cert_rsa_2048.crt 
+
+curl https://10.200.10.86/index.html -k
 
 
 ================================================================================
