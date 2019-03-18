@@ -1,0 +1,213 @@
+======================================== prepa
+export nfs qui vont bien sur e1 et e2
+
+exportfs -ra
+
+
+======================================== git
+
+- Maj gen.pl pour adressage vm / lans ...
+- git commit / push / pull
+
+======================================== interfaces et relance réseau
+
+- sur e1
+
+run de gen2.pl
+ajout de interfaces_e1 à /etc/network/interfaces
+
+- pareil sur e2
+
+======================================== lancement creation vms
+- sur e1
+
+grep 'e1$' virt-installs  > 1
+. 1
+
+- pareil sur e2
+
+======================================== passage des scripts de patch des interfaces
+- sur e1
+
+. post_ba.sh
+. post_da.sh
+. post_fa.sh
+. post_la.sh
+. post_sa.sh
+
+sur e2
+. post_bb.sh
+. post_db.sh
+. post_fb.sh
+. post_lb.sh
+. post_sb.sh
+
+======================================== storage
+- sur sa et sb
+
+yum install -y ./glusterfs-server-3.12.15-1.el7.x86_64.rpm ./glusterfs-api-3.12.15-1.el7.x86_64.rpm ./glusterfs-libs-3.12.15-1.el7.x86_64.rpm ./glusterfs-client-xlators-3.12.15-1.el7.x86_64.rpm ./glusterfs-fuse-3.12.15-1.el7.x86_64.rpm ./glusterfs-cli-3.12.15-1.el7.x86_64.rpm ./glusterfs-3.12.15-1.el7.x86_64.rpm userspace-rcu-0.10.0-3.el7.x86_64.rpm
+
+systemctl enable glusterd
+systemctl start glusterd
+systemctl status glusterd
+mkdir /gv0 /gv1 /gv2
+
+- sur sa
+
+gluster peer probe sbcls
+gluster peer probe sbsto
+
+- sur sb
+
+gluster peer probe sacls
+gluster peer probe sasto
+
+- sur sa
+
+gluster volume create gv0 replica 2 sasto:/gv0 sbsto:/gv0 force
+gluster volume start gv0
+gluster volume create gv1 replica 2 sasto:/gv1 sbsto:/gv1 force
+gluster volume start gv1
+gluster volume create gv2 replica 2 sasto:/gv2 sbsto:/gv2 force
+gluster volume start gv2
+gluster volume info
+
+======================================== montage gluster sur ba et bb
+- sur ba et bb
+
+mkdir /mnt/gv0 /mnt/gv1
+yum install glusterfs glusterfs-fuse -y
+
+ds /etc/fstab, ajouter :
+sasto:/gv0 /mnt/gv0 glusterfs rw,backupvolfile-server=sbsto 0 0
+sbsto:/gv1 /mnt/gv1 glusterfs rw,backupvolfile-server=sasto 0 0
+
+mount -a
+
+======================================== montage gluster sur ba et bb
+- sur la et lb
+
+mkdir /mnt/gv2
+yum install glusterfs glusterfs-fuse -y
+
+ds /etc/fstab, ajouter :
+sasto:/gv2 /mnt/gv2 glusterfs rw,backupvolfile-server=sbsto 0 0
+
+======================================== cluster dmz
+sur dmz a & b :
+
+# install de pcs (pacemaker)
+yum install pcs -y
+
+# choix d'un mdp (hacluster)
+passwd hacluster
+
+# activation service
+systemctl enable pcsd.service
+systemctl start pcsd.service
+
+# creation du cluster sur dmz a & b (commande que sur a)
+pcs cluster auth dmz_a_cluster_dmz dmz_b_cluster_dmz -u hacluster -p hacluster
+pcs cluster setup --start --name dmz_cluster dmz_a_cluster_dmz dmz_b_cluster_dmz
+pcs cluster enable --all
+
+# disable stonith
+pcs property set stonith-enabled=false
+
+# ip virtuelle (pour l'instant sur admin...)
+pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=192.168.230.100 iflabel=ifcl op monitor interval="5s" timeout="10s"
+
+======================================== haproxy sur dmz
+yum install -y haproxy
+systemctl enable haproxy
+
+openssl req -newkey rsa:2048 -nodes -keyout da_rsa_2048.key -x509 -out da_cert_rsa_2048.crt -subj "/C=FR/ST=Toulouse/L=Mounede/O=DSNA/OU=DTI/CN=swimaman.asap.dsna.fr"
+cat da_rsa_2048.key da_cert_rsa_2048.crt > /var/lib/haproxy/da_cert_rsa_2048.pem
+chown haproxy.haproxy /var/lib/haproxy/da_cert_rsa_2048.pem
+
+cat <<EOF > /etc/rsyslog.d/haproxy.conf
+$ModLoad imudp
+$UDPServerAddress 127.0.0.1
+$UDPServerRun 514
+
+local2.*        /var/log/haproxy.log
+EOF
+
+cat <<EOF > /etc/haproxy/haproxy.cfg
+
+listen https-in
+        bind 192.168.230.100:443 ssl crt /var/lib/haproxy/da_cert_rsa_2048.pem
+        log global
+        option httplog
+        balance roundrobin
+        server l1 load_balancer_a_intern:80 check
+        server l2 load_balancer_b_intern:80 check
+
+EOF
+
+# mise à jour des fichiers sur le 2nd noeud
+	
+scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
+scp /var/lib/haproxy/da_cert_rsa_2048.pem root@dbint:/var/lib/haproxy/
+
+pcs resource create reverse_proxy systemd:haproxy op monitor interval="5s" timeout="10s"
+
+# ordre de démarrage
+pcs constraint order start virtual_ip then start reverse_proxy
+pcs constraint order stop reverse_proxy then stop virtual_ip
+# colocalisation
+pcs constraint colocation add reverse_proxy virtual_ip INFINITY
+pcs property set no-quorum-policy=ignore
+
+======================================== ha proxy sur la et lb
+yum install -y haproxy
+systemctl enable haproxy
+
+cat <<EOF > /etc/rsyslog.d/haproxy.conf
+$ModLoad imudp
+$UDPServerAddress 127.0.0.1
+$UDPServerRun 514
+
+local2.*        /var/log/haproxy.log
+EOF
+
+cat <<EOF > /etc/haproxy/haproxy.cfg
+global
+    log         127.0.0.1 local2
+    chroot      /var/lib/haproxy
+    pidfile     /var/run/haproxy.pid
+    maxconn     1000
+    user        haproxy
+    group       haproxy
+    daemon
+
+defaults
+        mode    http
+
+listen http-in
+        bind load_balancer_a_intern:80
+        log global
+        option httplog
+        balance roundrobin
+        server f1 fuse_a_ingres:80 check
+        server f2 fuse_b_ingres:80 check
+
+EOF
+
+systemctl start haproxy
+systemctl restart rsyslog
+
+======================================== supplément esadmin & co
+sur e1 /kvm/t/sudoers contient :
+#!/bin/bash
+
+cat <<EOF >> /etc/sudoers
+
+esa     ALL=(ALL)       NOPASSWD: ALL
+EOF
+
+groupadd sudo
+usermod esa -G sudo
+
+=> EXECUTION
+for a in da db la lb fa fb sa sb ba bb; do echo $a; ssh root@${a}2 /mnt/t/sudoers; done

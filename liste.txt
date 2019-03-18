@@ -169,25 +169,28 @@ F/ VM gluster fs
 
 - récup des rpms sur http://mirror.centos.org/centos/7/storage/x86_64/gluster-3.12/
 
-yum install ./glusterfs-server-3.12.15-1.el7.x86_64.rpm ./glusterfs-api-3.12.15-1.el7.x86_64.rpm ./glusterfs-libs-3.12.15-1.el7.x86_64.rpm ./glusterfs-client-xlators-3.12.15-1.el7.x86_64.rpm ./glusterfs-fuse-3.12.15-1.el7.x86_64.rpm ./glusterfs-cli-3.12.15-1.el7.x86_64.rpm ./glusterfs-3.12.15-1.el7.x86_64.rpm userspace-rcu-0.10.0-3.el7.x86_64.rpm
+yum install -y ./glusterfs-server-3.12.15-1.el7.x86_64.rpm ./glusterfs-api-3.12.15-1.el7.x86_64.rpm ./glusterfs-libs-3.12.15-1.el7.x86_64.rpm ./glusterfs-client-xlators-3.12.15-1.el7.x86_64.rpm ./glusterfs-fuse-3.12.15-1.el7.x86_64.rpm ./glusterfs-cli-3.12.15-1.el7.x86_64.rpm ./glusterfs-3.12.15-1.el7.x86_64.rpm userspace-rcu-0.10.0-3.el7.x86_64.rpm
 
 sur chaque serveur :
 
 systemctl enable glusterd
 systemctl start glusterd
 systemctl status glusterd
-gluster peer probe 192.168.227.142
-gluster peer probe 192.168.224.142
+gluster peer probe sbcls
+gluster peer probe sbsto
 # sans dernière ligne pas moyen de se connecter de l'autre réseau
-mkdir /gv0
+mkdir /gv0 /gv1 /gv2
 
 sur le premier :
 
-gluster volume create gv0 replica 2 192.168.224.141:/gv0 192.168.224.142:/gv0 force
+gluster volume create gv0 replica 2 sasto:/gv0 sbsto:/gv0 force
 gluster volume start gv0
+gluster volume create gv1 replica 2 sasto:/gv1 sbsto:/gv1 force
+gluster volume start gv1
+gluster volume create gv2 replica 2 sasto:/gv2 sbsto:/gv2 force
+gluster volume start gv2
 gluster volume info
 
-(pareil pour gv1)
 
 sur les 2 (pour test) :
 
@@ -255,7 +258,6 @@ cat ifcfg-eth2 | sed -e 's/eth2/eth3/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:94:da:d
 
 pcs resource delete virtual_ip
 pcs resource create virtual_ip ocf:heartbeat:IPaddr2 ip=10.200.10.86 iflabel=ifcl op monitor interval="5s" timeout="10s"
-
 
 ================================================================================
 I1/ autour du load balancer (sur fa, fb)
