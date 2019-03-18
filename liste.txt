@@ -197,6 +197,9 @@ mount -t glusterfs 192.168.227.141:/gv0 /mnt/gv0
 [ tester que ça marche au reboot ]
 
 - sur BA et BB
+mkdir /mnt/gv0 /mnt/gv1
+yum install glusterfs glusterfs-fuse -y
+
 ds /etc/fstab
 192.168.224.141:/gv0    /mnt/gv0        glusterfs       rw,backupvolfile-server=192.168.224.142 0 0
 192.168.224.142:/gv1    /mnt/gv1        glusterfs       rw,backupvolfile-server=192.168.224.141 0 0
@@ -410,3 +413,41 @@ WantedBy=multi-user.target
 ^D
 systemctl enable http_perl_server
 systemctl start http_perl_server
+
+================================================================================
+K/ ajout d'une interface sortante sur storage pour les machines LB A & B
+  + montage nouveau répertoire réseau
+
+sur la :
+
+virsh attach-interface la bridge br_sto --model virtio --config
+virsh domiflist la | grep br_sto
+
+52:54:00:aa:55:88
+
+sur lb :
+
+virsh attach-interface lb bridge br_sto --model virtio --config
+virsh domiflist lb | grep br_sto
+
+52:54:00:32:a2:61
+
+sur la , puis lb
+
+cd /etc/sysconfig/network-scripts/
+cat ifcfg-eth3 | sed -e 's/eth3/eth4/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:aa:55:88/' -e 's/^IPADDR=.*$/IPADDR="192.168.224.111"/' > ifcfg-eth4
+cat ifcfg-eth3 | sed -e 's/eth3/eth4/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:32:a2:61/' -e 's/^IPADDR=.*$/IPADDR="192.168.224.112"/' > ifcfg-eth4
+
+ds /etc/fstab
+192.168.224.141:/gv2    /mnt/gv2        glusterfs       rw,backupvolfile-server=192.168.224.142 0 0
+
+sur sa et sb
+mkdir /gv2
+
+sur sa ou sb
+gluster volume create gv2 replica 2 192.168.224.141:/gv2 192.168.224.142:/gv2 force
+gluster volume start gv2
+
+sur la et lb
+yum install glusterfs glusterfs-fuse -y
+mount -a
