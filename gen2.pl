@@ -75,7 +75,7 @@
     [ 'broker_b',       'bb',2,4,2,132, ['esb','sto']            , 'c76', 'e2' ],
     [ 'data_store_a',   'sa',1,1,2,141, ['sto','cls']            , 'c76', 'e1' ],
     [ 'data_store_b',   'sb',1,1,2,142, ['sto','cls']            , 'c76', 'e2' ],
-    [ 'tools',          'to',1,1,25,100,[]                       , 'c76', 'e2' ]
+    [ 'tools',          'to',1,1,25,100,[]                       , 'c76', 'e1' ]
     );
 
 # global settings for NFS & NTP
@@ -158,10 +158,10 @@ foreach $v (@vms)
     &repl('hosts',$lst);
     print F $ks;
     close F;
-    print K "virt-install --os-type=linux --os-variant=rhel7 --location=/mnt/iso/$dist --vcpus $vcpu --ram $ram --name $nv --graphics none --noautoconsole --network bridge=br2_adm --disk /kvm/vms/$nv.img,size=$disk --arch x86_64 --virt-type kvm --initrd-inject=/kvm/t/$nv.ks --extra-args 'console=ttyS0,115200n8 serial ks=file://$nv.ks' # on $host\n";
-    print KK "virsh destroy $nv; virsh undefine $nv --remove-all-storage; rm -f /kvm/vms/$nv.img # on $host\n";
-    print KL "virsh start $nv # on $host\n";
-    print KS "((ssh root\@$nv shutdown -h now)& sleep 3;virsh shutdown $nv; sleep 3; virsh destroy $nv)& # on $host\n";
+    print K "virt-install --os-type=linux --os-variant=rhel7 --location=/mnt/iso/$dist --vcpus $vcpu --ram $ram --name ${nv}2 --graphics none --noautoconsole --network bridge=br2_adm --disk /kvm/vms/${nv}2.img,size=$disk --arch x86_64 --virt-type kvm --initrd-inject=/kvm/t/$nv.ks --extra-args 'console=ttyS0,115200n8 serial ks=file://$nv.ks' # on $host\n";
+    print KK "virsh destroy ${nv}2; virsh undefine ${nv}2 --remove-all-storage; rm -f /kvm/vms/${nv}2.img # on $host\n";
+    print KL "virsh start ${nv}2 # on $host\n";
+    print KS "((ssh root\@${nv}2 shutdown -h now)& sleep 3;virsh shutdown ${nv}2; sleep 3; virsh destroy ${nv}2)& # on $host\n";
 };
 close K;
 close KK;
@@ -186,14 +186,14 @@ foreach $v (@vms)
     $st="# Addresses of VMs on LANs shared with $name\n";
     open F,">post_$nv.sh";
     print F "#!/bin/bash\n\n";
-    print F "# --- stop the VM (if not the case already) ---\n echo stopping $nv \n virsh shutdown $nv\n sleep 3\n\n";
-    print F "# --- QEMU image mount ----\n echo 'mounting qemu img'\n modprobe nbd max_part=8\n qemu-nbd -c /dev/nbd0 /kvm/vms/$nv.img\n partx -a /dev/nbd0 \n mkdir /tmp/img \n mount /dev/nbd0p1 /tmp/img \n\n";
+    print F "# --- stop the VM (if not the case already) ---\n echo stopping $nv \n virsh shutdown ${nv}2\n sleep 3\n\n";
+    print F "# --- QEMU image mount ----\n echo 'mounting qemu img'\n modprobe nbd max_part=8\n qemu-nbd -c /dev/nbd0 /kvm/vms/${nv}2.img\n partx -a /dev/nbd0 \n mkdir /tmp/img \n mount /dev/nbd0p1 /tmp/img \n\n";
     $eth=1;
     foreach $vlan (@{$nets})
     {
 	$st.=$ht_vlan{$vlan}{'hosts'};
-	print F "# ---- KVM add intf for vlan $vlan ----\n virsh attach-interface $nv bridge br2_$vlan --model virtio --config\n";
-	print F " mac=`virsh domiflist $nv | grep br2_$vlan | sed -e 's/^.*  *//' | dd conv=ucase` \n";
+	print F "# ---- KVM add intf for vlan $vlan ----\n virsh attach-interface ${nv}2 bridge br2_$vlan --model virtio --config\n";
+	print F " mac=`virsh domiflist ${nv}2 | grep br2_$vlan | sed -e 's/^.*  *//' | dd conv=ucase` \n";
 	print F " cat <<EOF > /tmp/img/etc/sysconfig/network-scripts/ifcfg-eth$eth\n";
 	print F "NAME=\"eth$eth\"\n";
 	print F "DEVICE=\"eth$eth\"\n";
@@ -212,7 +212,7 @@ foreach $v (@vms)
     }
     &insert("$nv.ks","__hosts__",$st);
     print F "\n# ---- Unmount image ----\n echo 'dismounting qemu img'\n umount /tmp/img \n qemu-nbd -d /dev/nbd0 \n";
-    print F "\n# ---- restart the VM ----\n echo starting $nv \n virsh start $nv\n";
+    print F "\n# ---- restart the VM ----\n echo starting $nv \n virsh start ${nv}2\n";
     close F;
 }
 

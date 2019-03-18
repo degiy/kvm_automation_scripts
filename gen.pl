@@ -41,7 +41,7 @@
 # verif : # ip a | grep ': br_' | sed -e 's/group.*$//'
 #
 # full  abreviated             interface on host
-# vlan    vlan                 to create the vlan
+# vlan    vlan                 to create the vlan (do not use _ in short names, to be compatible with dns)
 # name    name  @ip res vlanid bridge intf onto
 # -------+---+---------+------+-----
 
@@ -52,9 +52,9 @@
     [ 'esb'                  ,'esb'   ,'192.168.223',223,'eno2' ],
     [ 'storage'              ,'sto'   ,'192.168.224',224,'eno2' ],
 
-    [ 'cluster_dmz'          ,'cl_dmz','192.168.225',225,'eno2' ],
-    [ 'cluster_load_balancer','cl_lb' ,'192.168.226',226,'eno2' ],
-    [ 'cluster_data_store'   ,'cl_ds' ,'192.168.227',227,'eno2' ],
+    [ 'cluster_dmz'          ,'cld'   ,'192.168.225',225,'eno2' ],
+    [ 'cluster_load_balancer','cll'   ,'192.168.226',226,'eno2' ],
+    [ 'cluster_data_store'   ,'cls'   ,'192.168.227',227,'eno2' ],
     );
 
 # hosts (name & host.id)
@@ -65,16 +65,17 @@
 
 # VMs : full name, abr name, nb_core, ram, disk, host.id, vlans, distro, prefered host...
 @vms= (
-    [ 'dmz_a'          ,'da',2,2,2,101, ['int','cl_dmz']     , 'c76', 'e1' ],
-    [ 'dmz_b'          ,'db',2,2,2,102, ['int','cl_dmz']     , 'c76', 'e2' ],
-    [ 'load_balancer_a','la',1,1,2,111, ['int','ing','cl_lb'], 'c76', 'e1' ],
-    [ 'load_balancer_b','lb',1,1,2,112, ['int','ing','cl_lb'], 'c76', 'e2' ],
-    [ 'fuse_a',         'fa',4,8,4,121, ['int','ing','esb']  , 'c76', 'e1' ],
-    [ 'fuse_b',         'fb',4,8,4,122, ['int','ing','esb']  , 'c76', 'e2' ],
-    [ 'broker_a',       'ba',2,4,2,131, ['esb','sto']        , 'c76', 'e1' ],
-    [ 'broker_b',       'bb',2,4,2,132, ['esb','sto']        , 'c76', 'e2' ],
-    [ 'data_store_a',   'sa',1,1,2,141, ['sto','cl_ds']      , 'c76', 'e1' ],
-    [ 'data_store_b',   'sb',1,1,2,142, ['sto','cl_ds']      , 'c76', 'e2' ]
+    [ 'dmz_a'          ,'da',2,2,2,101, ['int','cld']            , 'c76', 'e1' ],
+    [ 'dmz_b'          ,'db',2,2,2,102, ['int','cld']            , 'c76', 'e2' ],
+    [ 'load_balancer_a','la',1,1,2,111, ['int','ing','cll']      , 'c76', 'e1' ],
+    [ 'load_balancer_b','lb',1,1,2,112, ['int','ing','cll']      , 'c76', 'e2' ],
+    [ 'fuse_a',         'fa',4,8,4,121, ['int','ing','esb','sto'], 'c76', 'e1' ],
+    [ 'fuse_b',         'fb',4,8,4,122, ['int','ing','esb','sto'], 'c76', 'e2' ],
+    [ 'broker_a',       'ba',2,4,2,131, ['esb','sto']            , 'c76', 'e1' ],
+    [ 'broker_b',       'bb',2,4,2,132, ['esb','sto']            , 'c76', 'e2' ],
+    [ 'data_store_a',   'sa',1,1,2,141, ['sto','cls']            , 'c76', 'e1' ],
+    [ 'data_store_b',   'sb',1,1,2,142, ['sto','cls']            , 'c76', 'e2' ],
+    [ 'tools',          'to',1,1,25,100,[]                       , 'c76', 'e2' ]
     );
 
 # global settings for NFS & NTP
