@@ -107,6 +107,13 @@ alias h=history
 
 EOF
 
+cat <<EOF >>/home/esa/.bashrc
+alias la='ls -la --color'
+alias m=less
+alias h=history
+
+EOF
+
 # ---------- SSH ----------
 echo "- ssh config"
 
@@ -118,9 +125,21 @@ ssh-keygen -t rsa -f /root/.ssh/id_rsa -N ''
 cat <<EOF > /root/.ssh/authorized_keys
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC4je5atkdrcESaRCke9wS6sZ+XvckECr81HhfJnCdQTouTSOkfkdyMnkCH+sU9Sdsbt7RpadarvQSb4hgRcop+K/iBmkkzicnhtyXxy3q/aXU40jaYvet7mubs93QYt7ozvjFqOUxnMLL99HsEVibIgykBi6+Rtio0ogL23kF08gI5k2AxhM/6bs7zIULEFRSli67kxDfM9ozQ2FhgAJHwEaqmymZpOGNt7gNsD02R3cDtkAt7g9ZmcaNOQlFDEpTjHROoEJyEVZSxTIiL9DANBu8kc7LxoIP1SkKuIPpxsBYZJeJx3RtBeIXP6O5+1SfqOVHgUSuKqt+hRq4RFMY3 root@ebrox
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfbl/kVn84JIDUq9McmtjHb5Kt2BOJ6Tb81xp1q4QFmTuCGbdZB8ux4A020qo2JMQOuBVoo6jZQ1oEc/8+uf7uyAzE0xOuy7L++lbrpN9nvIPZPunhthw4ItzWsw74S+5tcN7NnzT1O+FD/FoDlXYcQxQYjlTDpX/wZF246uEfdCCqBHJXEqs+PqZUuasErdghr7RhxzeZELk3Epm5xBZLEcHWT4GClOKx/f5r/bTfF4vB1e9EkveSz8rSTaZL4QAYBhLpnGTJdL6hF0u5V8y60eXQBLL4XdLIMBlNYMYZszSQnbv7p9xKXnTYuP2iiHDPOiDgmgcwoPtQfdhz//MT root@edino
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCWl3lgjN/9NVNZ26NdQcNx7FoSox84f1jC52lCN8yHPuojgwu3rzuFdoaSf6+vio8XAIxVMTCt0EncdhsrNYNDNOvthURsIC+cnFtZlOnuw3eQTOexIKVc2v3hwXvpGayp7H0/9iQRmOS5aBUq/j86Hse+YMptc/rAG1Mj5s8Q0oCmKEz717RHSTxji3q2wL6n4ue7jkg1ozaeWXr5fQ3OGvRGPyfz+RPrDetO/1LMsthPeJlyp44pmOh3xdrsn30Mf6k+5/LjBEd4cQ5mB49l9bfyBeRHw4traq5JvVu4PJqWoq1N05I9xaygKwliBcz+RTkKnY9fdge3TyBKtrj/ root@edopi
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDhXXmgspiJ9vPhLLOuBCYNvqe7MhtBtotVtvBBG6flVLnvw5znGQlk2k7xgLLF/6W6ResbtqhWTAmg+2FPhcoivxzKGGIsbFGGRyKXOCt4Trq2eHMELllSplJbcqRoBPF1mbA593ojK8LVR0Rlw3T8ymqAEwhz5+51Iptl7TLKRkm4r1k2lYBM4WdaaHZlpLvO7+uXaZoqFH6LKErt6Xh07bEqL05+Pvzvc/Fm1GRHZJeEwqD8tnGBwhRmXZFgGXetQovPfjh6eTJLoSBfr1xgWAhocNPnlaZGNiehcvnd2OCwHU01HkIPD372BJubTWa260tSINv37cTE+BCD7kyB jjansou@PLEC0NQHPU
 EOF
 
 chmod 0600 /root/.ssh/authorized_keys
+
+mkdir -m0700 /home/esa/.ssh
+chown esa.esa /home/esa/.ssh
+cat <<EOF > /home/esa/.ssh/authorized_keys
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDhXXmgspiJ9vPhLLOuBCYNvqe7MhtBtotVtvBBG6flVLnvw5znGQlk2k7xgLLF/6W6ResbtqhWTAmg+2FPhcoivxzKGGIsbFGGRyKXOCt4Trq2eHMELllSplJbcqRoBPF1mbA593ojK8LVR0Rlw3T8ymqAEwhz5+51Iptl7TLKRkm4r1k2lYBM4WdaaHZlpLvO7+uXaZoqFH6LKErt6Xh07bEqL05+Pvzvc/Fm1GRHZJeEwqD8tnGBwhRmXZFgGXetQovPfjh6eTJLoSBfr1xgWAhocNPnlaZGNiehcvnd2OCwHU01HkIPD372BJubTWa260tSINv37cTE+BCD7kyB jjansou@PLEC0NQHPU
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC2VEHPZvBNexZeNxCZTA65isbjIjpKIiefkDXj3tuw+Bd18m6RhYO1stQOoHaoWnk++jmmy+UIHY8c8IKqgvZgEy1fBZcMoFefG5JnPToM+P6Q6e48VfKqI/0HoLkgCDnj8Z7Ldm1DV/Vl2VXCNNymcmiZN1WUfdScAoYVgqBzj6V+XmB5jzXLZnImMwec1HWGZbhbDd5HzqGbbu49aM+yWUudZ8TtWmso4PqbIiUtPvzI05Yuej6wiodUhGQuj3oz89Qaht+SFOFLrVQnTY3TNlLQSrUQa8jBDJj90QAMkhl+Fj3eae3ZO8vO8UWvm6gkDKpbNZzAsyZhX9dKjWXF esadmin@mindi
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDFS5AuZm6Ja444Gzn1I/65S7JVuxTA5W6eLuy50ehBxAFVv8/nFvbO6gl0r/cDJw5QSGNLWaDLMG2yLvmmT217WsTP8GUcQPpaOTQMzscSsmKstH4Lbh0H9JJNUWusxyIXbfYdJyo9XAsvhAOe2E0nPs7MC9H15XkNS1HIra8gzhqL/9K/ZL294xoZ/NQD2b1IEaxpkSEjq34zKi9gAnSpt707hHYTtlHrNP9ZzskGXVIGkhTp5jGeQBY0DlWCCvAIwqlXC8i5vJGXgrRsrsvdlmID9LSmArjjoCgvL6mB2QRtpxnMlDPOVjUt31s7/xz1y4ScrHZy+ex6O6/CLTw3 esadmin@matix
+EOF
+chown esa.esa /home/esa/.ssh/authorized_keys
+
 
 # ---------- NTP ----------
 echo "- ntp config"
@@ -166,6 +185,9 @@ EOF
 echo "- yum update"
 yum clean all
 yum -y update 
+
+# ----- no ipv6 from boot (grub) -----
+sed -i '/vmlinuz/ s/$/ ipv6.disable=1 /' /boot/grub2/grub.cfg
 
 echo "POST: DONE!"
 %end
