@@ -69,6 +69,7 @@ $eno="eno".$num2;
 #       P1 P2 P3
 @serv1=( 1, 2, 3);
 @serv2=( 2, 3, 1);
+@nfss= ( 1, 3, 2);
 
 # hosts (name & host.id)
 $me1='e'.$serv1[$num-1];
@@ -95,7 +96,7 @@ $me2='e'.$serv2[$num-1];
 
 # global settings for NFS & NTP
 $admin_network='192.168.'.$num220;
-$nfs_host_id='1';
+$nfs_host_id=$nfss[$num-1];
 
 # ---------------------------------code-----------------------------------------------
 
