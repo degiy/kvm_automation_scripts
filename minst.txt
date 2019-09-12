@@ -13,7 +13,7 @@ exportfs -ra
 
 - sur e1
 
-run de gen2.pl
+run de genN.pl en reglant la version d'instance
 ajout de interfaces_e1 à /etc/network/interfaces
 
 - pareil sur e2
@@ -45,6 +45,7 @@ sur e2
 ======================================== storage
 - sur sa et sb
 
+cd /mnt/t/gluster
 yum install -y ./glusterfs-server-3.12.15-1.el7.x86_64.rpm ./glusterfs-api-3.12.15-1.el7.x86_64.rpm ./glusterfs-libs-3.12.15-1.el7.x86_64.rpm ./glusterfs-client-xlators-3.12.15-1.el7.x86_64.rpm ./glusterfs-fuse-3.12.15-1.el7.x86_64.rpm ./glusterfs-cli-3.12.15-1.el7.x86_64.rpm ./glusterfs-3.12.15-1.el7.x86_64.rpm userspace-rcu-0.10.0-3.el7.x86_64.rpm
 
 systemctl enable glusterd
@@ -93,6 +94,30 @@ yum install glusterfs glusterfs-fuse -y
 ds /etc/fstab, ajouter :
 sasto:/gv2 /mnt/gv2 glusterfs rw,backupvolfile-server=sbsto 0 0
 
+mount -a
+
+======================================== si besoin ajout interface externes à dmz a & b
+# sur da & db
+shutdown -h now
+
+# sur machine hote de la vm (ex pour da3, à adapter)
+cd /kvm/vms
+qemu-nbd -c /dev/nbd0 da3.img
+partprobe /dev/nbd0
+mkdir /tmp/img
+mount /dev/nbd0p1 /tmp/img
+cd /tmp/img/etc/sysconfig/network-scripts/
+virsh attach-interface da3 bridge br0 --model virtio --config
+virsh domiflist da3 | grep br0
+# notez l'adresse mac retournée
+cat ifcfg-eth2 | sed -e 's/eth2/eth3/' > ifcfg-eth3
+vi ifcfg-eth3
+# changer l'adresse mac avec celle notée et l'@ip par celle souhaitée + gateway
+cd /
+umount /tmp/img
+qemu-nbd -d /dev/nbd0
+virsh start da3
+
 ======================================== cluster dmz
 sur dmz a & b :
 
@@ -107,8 +132,8 @@ systemctl enable pcsd.service
 systemctl start pcsd.service
 
 # creation du cluster sur dmz a & b (commande que sur a)
-pcs cluster auth dmz_a_cluster_dmz dmz_b_cluster_dmz -u hacluster -p hacluster
-pcs cluster setup --start --name dmz_cluster dmz_a_cluster_dmz dmz_b_cluster_dmz
+pcs cluster auth dmz-a-cluster-dmz dmz-b-cluster-dmz -u hacluster -p hacluster
+pcs cluster setup --start --name dmz-cluster dmz-a-cluster-dmz dmz-b-cluster-dmz
 pcs cluster enable --all
 
 # disable stonith
@@ -140,14 +165,14 @@ listen https-in
         log global
         option httplog
         balance roundrobin
-        server l1 load_balancer_a_intern:80 check
-        server l2 load_balancer_b_intern:80 check
+        server l1 load-balancer-a-intern:80 check
+        server l2 load-balancer-b-intern:80 check
 
 EOF
 
-# mise à jour des fichiers sur le 2nd noeud
+# mise à jour des fichiers sur le 2nd noeud -- que sur da ---
 	
-scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
+#scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
 scp /var/lib/haproxy/da_cert_rsa_2048.pem root@dbint:/var/lib/haproxy/
 
 pcs resource create reverse_proxy systemd:haproxy op monitor interval="5s" timeout="10s"
@@ -185,12 +210,12 @@ defaults
         mode    http
 
 listen http-in
-        bind load_balancer_a_intern:80
+        bind load-balancer-a-intern:80
         log global
         option httplog
         balance roundrobin
-        server f1 fuse_a_ingres:80 check
-        server f2 fuse_b_ingres:80 check
+        server f1 fuse-a-ingres:80 check
+        server f2 fuse-b-ingres:80 check
 
 EOF
 
@@ -209,5 +234,70 @@ EOF
 groupadd sudo
 usermod esa -G sudo
 
-=> EXECUTION
+# EXECUTION
 for a in da db la lb fa fb sa sb ba bb; do echo $a; ssh root@${a}2 /mnt/t/sudoers; done
+
+# ajout d'alias tools sur fa et fb
+for a in fa fb; do echo $a; ssh root@${a}2 "echo '192.168.230.100 to tools' >> /etc/hosts"; done
+
+
+======================================= tools
+# sur to
+# copie cle publique root tools sur /mnt/t
+cp /root/.ssh/id_rsa.pub /mnt/t/to_root_pub
+
+# install java
+yum install -y java-1.8.0
+
+# installation des rpm ansible
+# ceux de centos
+yum install -y PyYAML python-cryptography python-setuptools python-six python-babel python-markupsafe python-cryptography python2-pyasn1
+
+# ceux de l'epel
+cd /mnt/t/ansible_rpms
+rpm -i *rpm
+
+# installer les hosts admin ds /etc/hosts
+# aller ds le repertoire d'execution du script de création des vms
+cd /mnt/t/kvm_automation_scripts/p2
+grep ' ..adm ' vm_hosts >> /etc/hosts
+
+# descativer la verif de clé host pour ansible
+StrictHostKeyChecking no dans /etc/ssh/ssh_config
+
+# passer esa
+su - esa
+# generer une cle ssh
+ssh-keygen -t rsa
+cp ~esa/.ssh/id_rsa.pub /mnt/t/to_esa_pub
+
+# sur machine hote (on propage les clefs partout)
+for a in da db la lb fa fb sa sb ba bb; do echo $a; ssh root@${a}2 "cat /mnt/t/to_root_pub >> /root/.ssh/authorized_keys; cat /mnt/t/to_esa_pub >> /home/esa/.ssh/authorized_keys"; done
+
+# retour compte esa sur tools
+# verif acces ssh (pour ansible sous esa), faire 2x
+for a in da db la lb fa fb sa sb ba bb; do echo -n " -> $a : "; ssh $a hostname; done
+
+# recopier les scripts ansible
+tar xvf /mnt/t/ansible-role-jboss-fuse-amq-ha7.tar
+
+# copier les zip de fuse et d'artemis dans distrib
+cd /home/esa/ansible-role-jboss-fuse-amq-ha/playbook-examples/distrib
+cp /mnt/t/fuse/amq-broker-7.1.0-bin.zip .
+cp /mnt/t/fuse/jboss-fuse-karaf-6.3.0.redhat-329.zip .
+
+# detarer le nexus
+cd ~/
+tar xvf /mnt/t/fuse/nexus.tar
+
+# lancer le nexus
+./nexus/nexus-2.14.3-02/bin/nexus start
+
+# verif de la machine hote que ça marche
+wget --no-proxy to:8081/nexus
+
+# ------ ansible run ------
+cd ~/ansible-role-jboss-fuse-amq-ha/playbook-examples/2fuse-2artemis
+ansible-playbook ./playbook-install.yml
+
+

@@ -261,3 +261,7 @@ sub insert
 #
 # ----- NMAP ----
 # net=220; while (( $net <= 227 )); do echo "===== on net $net =====";((net=$net+1)); nmap -sn 192.168.$net.3-254 | grep "scan report"; echo; done
+
+# ifup ici pour P2 (230)
+# grep 'iface eno[1234].23[0-9]' /etc/network/interfaces | awk '{print "ifup " $2}'
+
