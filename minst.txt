@@ -1,30 +1,66 @@
+======================================== transferts de fichiers
+/kvm/iso (au moins centos 7.6)
+/kvm/t (au moins kvm_automation_scripts ansible-role-jboss-fuse-amq-ha7.tar ansible_rpms fuse gluster)
+
+
 ======================================== prepa
-export nfs qui vont bien sur e1 et e2
+# nommage e1 et e2 des serveurs éligibles
+vi /etc/hosts
+
+# montage de la distib (centos 7.6 + debian au besoin) sur e1 : editer /etc/fstab
+vi /etc/fstab
+/kvm/iso/centos_76.iso  /mnt/iso/c76    iso9660 ro,relatime
+/kvm/iso/debian-9.6.0-amd64-DVD-1.iso   /mnt/iso/d96    iso9660 ro,relatime
+
+mount -a
+
+# export nfs qui vont bien sur e1 et e2 + vms
+vi /etc/exports
+
+/mnt/iso/c76 192.168.192.0/18(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso/d96 192.168.192.0/18(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash)
+/mnt/iso/f28 192.168.192.0/18(ro,async,no_subtree_check,no_root_squash) e2(ro,async,no_subtree_check,no_root_squash)
+/kvm/t  e2(rw,sync,no_subtree_check,no_root_squash) 192.168.192.0/18(rw,sync,no_subtree_check,no_root_squash)
 
 exportfs -ra
+showmount -e
 
+# creation repertoire pour images des vms
+mkdir /kvm/vms
 
 ======================================== git
 
-- Maj gen.pl pour adressage vm / lans ...
+- Maj genN.pl pour
+  - num plateforme
+  - choix interface enoX pour porter le bridge
 - git commit / push / pull
+- editer le ks.template pour clefs ssh publiques à intégrer
 
 ======================================== interfaces et relance réseau
 
 - sur e1
 
-run de genN.pl en reglant la version d'instance
-ajout de interfaces_e1 à /etc/network/interfaces
+# run de genN.pl en reglant la version d'instance
+# ajout de interfaces_e1 à /etc/network/interfaces
+cat interfaces_e1 >> /etc/network/interfaces
+# reapplication modif réseaux
+systemctl restart networking
 
-- pareil sur e2
+- sur e2
+cat interfaces_e2 >> /etc/network/interfaces
+systemctl restart networking
+
+# verif du ping admin e2 via e1
+ping 192.168.220.2
 
 ======================================== lancement creation vms
-- sur e1
-
+# sur e1
 grep 'e1$' virt-installs  > 1
 . 1
 
-- pareil sur e2
+# pareil sur e2
+grep 'e2$' virt-installs  > 2
+. 2
 
 ======================================== passage des scripts de patch des interfaces
 - sur e1
@@ -41,6 +77,10 @@ sur e2
 . post_fb.sh
 . post_lb.sh
 . post_sb.sh
+
+maj des hosts (sur e1 et e2) (adapter le num de plateforme)
+cat vm_hosts | grep ' ..adm ' | awk '{print $1,$2"1"}' >> /etc/hosts
+
 
 ======================================== storage
 - sur sa et sb
@@ -79,9 +119,13 @@ gluster volume info
 mkdir /mnt/gv0 /mnt/gv1
 yum install glusterfs glusterfs-fuse -y
 
-ds /etc/fstab, ajouter :
+# ds /etc/fstab, ajouter :
+
+cat <<'EOF' > /etc/fstab
+
 sasto:/gv0 /mnt/gv0 glusterfs rw,backupvolfile-server=sbsto 0 0
 sbsto:/gv1 /mnt/gv1 glusterfs rw,backupvolfile-server=sasto 0 0
+EOF
 
 mount -a
 
@@ -91,8 +135,12 @@ mount -a
 mkdir /mnt/gv2
 yum install glusterfs glusterfs-fuse -y
 
-ds /etc/fstab, ajouter :
+# ds /etc/fstab, ajouter :
+
+cat <<'EOF' > /etc/fstab
+
 sasto:/gv2 /mnt/gv2 glusterfs rw,backupvolfile-server=sbsto 0 0
+EOF
 
 mount -a
 
@@ -150,7 +198,7 @@ openssl req -newkey rsa:2048 -nodes -keyout da_rsa_2048.key -x509 -out da_cert_r
 cat da_rsa_2048.key da_cert_rsa_2048.crt > /var/lib/haproxy/da_cert_rsa_2048.pem
 chown haproxy.haproxy /var/lib/haproxy/da_cert_rsa_2048.pem
 
-cat <<EOF > /etc/rsyslog.d/haproxy.conf
+cat <<'EOF' > /etc/rsyslog.d/haproxy.conf
 $ModLoad imudp
 $UDPServerAddress 127.0.0.1
 $UDPServerRun 514
@@ -158,7 +206,7 @@ $UDPServerRun 514
 local2.*        /var/log/haproxy.log
 EOF
 
-cat <<EOF > /etc/haproxy/haproxy.cfg
+cat <<'EOF' > /etc/haproxy/haproxy.cfg
 
 listen https-in
         bind 192.168.230.100:443 ssl crt /var/lib/haproxy/da_cert_rsa_2048.pem
@@ -172,7 +220,7 @@ EOF
 
 # mise à jour des fichiers sur le 2nd noeud -- que sur da ---
 	
-#scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
+scp /etc/haproxy/haproxy.cfg dbint:/etc/haproxy/
 scp /var/lib/haproxy/da_cert_rsa_2048.pem root@dbint:/var/lib/haproxy/
 
 pcs resource create reverse_proxy systemd:haproxy op monitor interval="5s" timeout="10s"
@@ -188,7 +236,7 @@ pcs property set no-quorum-policy=ignore
 yum install -y haproxy
 systemctl enable haproxy
 
-cat <<EOF > /etc/rsyslog.d/haproxy.conf
+cat <<'EOF' > /etc/rsyslog.d/haproxy.conf
 $ModLoad imudp
 $UDPServerAddress 127.0.0.1
 $UDPServerRun 514
@@ -196,7 +244,7 @@ $UDPServerRun 514
 local2.*        /var/log/haproxy.log
 EOF
 
-cat <<EOF > /etc/haproxy/haproxy.cfg
+cat <<'EOF' > /etc/haproxy/haproxy.cfg
 global
     log         127.0.0.1 local2
     chroot      /var/lib/haproxy
@@ -226,7 +274,7 @@ systemctl restart rsyslog
 sur e1 /kvm/t/sudoers contient :
 #!/bin/bash
 
-cat <<EOF >> /etc/sudoers
+cat <<'EOF' >> /etc/sudoers
 
 esa     ALL=(ALL)       NOPASSWD: ALL
 EOF
@@ -299,5 +347,6 @@ wget --no-proxy to:8081/nexus
 # ------ ansible run ------
 cd ~/ansible-role-jboss-fuse-amq-ha/playbook-examples/2fuse-2artemis
 ansible-playbook ./playbook-install.yml
+ansible-playbook ./playbook-start.yml 
 
 
