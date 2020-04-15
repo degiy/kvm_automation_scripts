@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 # num = platform Pnum
-$num=3;
+$num=2;
 
 # this script generate several files :
 #
