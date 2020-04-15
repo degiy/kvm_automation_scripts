@@ -12,6 +12,26 @@ A/ Install physique 3 serveurs e1,e2,e3
 10.200.10.82    edino e2
 10.200.10.83    edopi e3
 
+=> ça a bougé :
+
+10.196.32.208 @vip dmz P1 (celle qui devra être adressée par le firewall EEI en lieu et place de 10.200.10.86)
+10.196.32.209 @vip dmz P2
+10.196.32.210 @vip dmz P3
+10.196.32.211 ebrox
+10.196.32.212 edino
+10.196.32.213 edopi
+10.196.32.214 vm P1 dmz a
+10.196.32.215 vm P1 dmz b
+10.196.32.216 vm P2 dmz a
+10.196.32.217 vm p2 dmz b
+10.196.32.218 vm p3 dmz a
+10.196.32.219 vm p3 dmz b
+10.196.32.220 etrat
+10.196.32.221 vm etrat std1
+10.196.32.222 vm etrat std2
+10.196.32.223 vm etrat bastion
+
+
 # cat /etc/debian_version  : 9.6 (stretch de 2017)
 4.9.0-8-amd64 #1 SMP Debian 4.9.130-2 (2018-10-27) x86_64 GNU/Linux
 QEMU emulator version 2.8.1(Debian 1:2.8+dfsg-6+deb9u5)
@@ -242,6 +262,8 @@ trouver une ip dispo
 map -sn 10.200.10.0/24 | grep 10.200.10 | sed -e 's/^.*10.200.10.//' -e 's/^).*$//' | sort -n
 - > 84 et 85 en fixe et 86 en flottante
 
+arrêter les vms da et db
+
 virsh attach-interface da bridge br0 --model virtio --config
 virsh domiflist da | grep br0
 
@@ -251,6 +273,8 @@ virsh attach-interface db bridge br0 --model virtio --config
 virsh domiflist db | grep br0
 
 => 52:54:00:94:da:d2   db
+
+redemarrer les vms
 
 cd /etc/sysconfig/network-scripts/
 cat ifcfg-eth2 | sed -e 's/eth2/eth3/g' -e 's/^HWADDR.*$/HWADDR=52:54:00:fe:ff:ce/' -e 's/^IPADDR=.*$/IPADDR="10.200.10.84"/' > ifcfg-eth3
@@ -453,3 +477,22 @@ gluster volume start gv2
 sur la et lb
 yum install glusterfs glusterfs-fuse -y
 mount -a
+
+
+========== retaillage partition
+
+cd /kvm/vms
+ qemu-img resize ba.img 5G
+ qemu-img info ba.img
+qemu-nbd -c /dev/nbd0 /kvm/vms/ba.img 
+partx -a /dev/nbd0 
+fdisk /dev/nbd0
+# d puis n puis N puis w
+partx -a /dev/nbd0 
+partx -a /dev/nbd0p1
+mkdir /tmp/img
+mount /dev/nbd0p1 /tmp/img
+xfs_growfs /tmp/img
+umount /tmp/img
+qemu-nbd -d /dev/nbd0 
+virsh start ba
